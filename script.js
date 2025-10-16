@@ -352,6 +352,8 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
   function hideDragHint() {
     if (!dragHint || hintHiddenThisSession) return;
     dragHint.classList.add('dragHint-hide');
+    dragHint.style.animationPlayState = 'paused';
+    dragHint.style.opacity = 0; // ensure it disappears fully
     hintHiddenThisSession = true;
     setTimeout(() => (dragHint.style.display = 'none'), 800);
     // Accessibility: announce that the hint was dismissed so screen readers update
