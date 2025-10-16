@@ -340,17 +340,19 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
   // --- Drag Hint Logic (auto-hide after real interaction) ---
   const dragHint = document.getElementById('dragHint');
 
-  // Show hint initially if not dismissed before
-  if (dragHint && !localStorage.getItem('dragHintDismissed')) {
+  // Show hint initially on every load
+  if (dragHint) {
     dragHint.style.opacity = 1;
     dragHint.style.animationPlayState = 'running';
   }
 
   // Hide permanently when user has clearly interacted (hover, tooltip, or tap)
+  // Session-only dismissal: hide the hint for this page session
+  let hintHiddenThisSession = false;
   function hideDragHint() {
-    if (!dragHint || localStorage.getItem('dragHintDismissed')) return;
+    if (!dragHint || hintHiddenThisSession) return;
     dragHint.classList.add('dragHint-hide');
-    localStorage.setItem('dragHintDismissed', 'true');
+    hintHiddenThisSession = true;
     setTimeout(() => (dragHint.style.display = 'none'), 800);
     // Accessibility: announce that the hint was dismissed so screen readers update
     try {
@@ -359,22 +361,8 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
     } catch (e) {}
   }
 
-  // Listen for *any* sign of interaction: pointermove or click
-  document.addEventListener('pointermove', hideDragHint, { once: true });
-  document.addEventListener('click', hideDragHint, { once: true });
-
-  // Also hide when Chart.js tooltip activates (guaranteed sign of drag/hover)
-  try {
-    if (overallChart && overallChart.tooltip && typeof overallChart.tooltip.draw === 'function') {
-      const origDraw = overallChart.tooltip.draw;
-      overallChart.tooltip.draw = function (...args) {
-        hideDragHint();
-        if (origDraw) return origDraw.apply(this, args);
-      };
-    }
-  } catch (e) {
-    // non-fatal: if Chart internals differ, we still have pointer/click fallback
-  }
+  // Previously we hid the hint on any pointermove/click or tooltip activation.
+  // Instead, we'll only hide the hint when the user actually begins dragging (movement beyond a small threshold).
   overlay.style.display = 'block';
   overlay.style.background = 'transparent';
   // Ensure internal units are seconds
@@ -419,10 +407,10 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
   if (window._hzEnabled === undefined) window._hzEnabled = true;
   window._hzUserMin = window._hzUserMin || userTime;
 
-  // create a soft vertical gradient for the chart fill
+  // create a soft vertical gradient for the chart fill (darker blue tones)
   const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
-  gradient.addColorStop(0, 'rgba(80, 150, 255, 0.25)');
-  gradient.addColorStop(1, 'rgba(80, 150, 255, 0.0)');
+  gradient.addColorStop(0, 'rgba(30, 100, 255, 0.25)');
+  gradient.addColorStop(1, 'rgba(30, 100, 255, 0.0)');
 
   overallChart = new Chart(ctx, {
     type: 'line',
@@ -431,7 +419,7 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
       datasets: [{
         label: labelText,
         data: counts,
-        borderColor: 'rgba(60, 140, 255, 0.9)',
+  borderColor: 'rgba(30, 100, 255, 0.95)',
         borderWidth: 2.5,
         pointRadius: 0,
         tension: 0.35,
@@ -499,11 +487,11 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
         const xMin = x.getPixelForValue(bandLow);
         const xMax = x.getPixelForValue(bandHigh);
 
-        // draw base band first (neutral gray)
-        ctx.save();
-        ctx.fillStyle = 'rgba(180,180,180,0.35)'; // light neutral gray
-        ctx.fillRect(xMin, chartArea.top, xMax - xMin, chartArea.bottom - chartArea.top);
-        ctx.restore();
+  // draw base band first (darker neutral gray)
+  ctx.save();
+  ctx.fillStyle = 'rgba(140,140,140,0.45)'; // darker neutral gray
+  ctx.fillRect(xMin, chartArea.top, xMax - xMin, chartArea.bottom - chartArea.top);
+  ctx.restore();
 
         // draw compare band on top if present (soft green)
         if (compareTime) {
@@ -512,12 +500,12 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
           const cMin = x.getPixelForValue(compareLow);
           const cMax = x.getPixelForValue(compareHigh);
           ctx.save();
-          ctx.fillStyle = 'rgba(120,200,120,0.35)'; // light faded green
+          ctx.fillStyle = 'rgba(90,180,90,0.45)'; // slightly darker green
           ctx.fillRect(cMin, chartArea.top, cMax - cMin, chartArea.bottom - chartArea.top);
           // optional compare marker (subtle)
           const px = x.getPixelForValue(compareTime);
           // keep drawing call but make the inner marker visually transparent
-          ctx.fillStyle = 'rgba(120,200,120,0)'; // fully transparent
+          ctx.fillStyle = 'rgba(90,180,90,0)'; // fully transparent
           ctx.fillRect(px - 3, chartArea.top, 6, chartArea.bottom - chartArea.top);
           ctx.restore();
         }
@@ -533,9 +521,10 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
   let startX = 0;
   let hintTimer = null;
   let startBaseTime = null; // anchor (seconds) for the current drag
+  let hintPendingDrag = false; // true after mousedown/touchstart until movement exceeds threshold
 
   // Show initial animated cue on load (only if not dismissed)
-  try { if (dragHint && !localStorage.getItem('dragHintDismissed')) { dragHint.style.animation = 'dragPulse 2.8s ease-in-out infinite'; } } catch (e) {}
+  try { if (dragHint && !hintHiddenThisSession) { dragHint.style.animation = 'dragPulse 2.8s ease-in-out infinite'; } } catch (e) {}
 
   overlay.onmousedown = e => {
     dragging = true;
@@ -549,14 +538,22 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
     } catch (err) {
       startBaseTime = userTime;
     }
-    // hide hint during drag
-    try { if (hint) hint.style.opacity = 0; } catch (e) {}
+    // mark that a real drag may begin; we'll hide the hint only after movement exceeds a small threshold
+    hintPendingDrag = true;
     clearTimeout(hintTimer);
   };
   overlay.onmousemove = e => {
   if (!dragging) return;
   // Prevent invalid touch data from triggering NaN calculations
   if (isNaN(e.offsetX) || e.offsetX === undefined) return;
+    // If the hint is pending, only hide it once the user actually moves the pointer a few pixels
+    if (hintPendingDrag) {
+      const moved = Math.abs(e.offsetX - startX);
+      if (moved > 4) {
+        try { hideDragHint(); } catch (er) {}
+        hintPendingDrag = false;
+      }
+    }
     const deltaX = e.offsetX - startX;
     const secondsPerPixel = overlay.offsetWidth > 0 ? (maxT - minT) / overlay.offsetWidth : 0;
     // compute compTime relative to startBaseTime so drags continue from last compare position
@@ -604,7 +601,7 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
   // ensure visible class triggers fade-in (do this before updating the chart)
   if (!label.classList.contains('visible')) requestAnimationFrame(() => label.classList.add('visible'));
 
-  try { if (hint) hint.style.opacity = 0; } catch (e) {}
+  // do not aggressively hide the hint here; hiding is managed by hintPendingDrag logic above
   // final: update chart visuals without animation
   overallChart.update('none');
   };
@@ -627,8 +624,10 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
     // Show cue again after 10s idle (only if not dismissed)
     clearTimeout(hintTimer);
     hintTimer = setTimeout(() => {
-      try { if (dragHint && !localStorage.getItem('dragHintDismissed')) dragHint.style.animation = 'dragPulse 2.8s ease-in-out infinite'; } catch (e) {}
+      try { if (dragHint && !hintHiddenThisSession) dragHint.style.animation = 'dragPulse 2.8s ease-in-out infinite'; } catch (e) {}
     }, 10000);
+  // clear pending hint state if mouse/touch ended without sufficient movement
+  hintPendingDrag = false;
   };
 
   // Helper: compute "offsetX" from a clientX-like point relative to the overlay
@@ -675,6 +674,26 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
   overlay.addEventListener('touchend', () => {
     overlay.onmouseup();
   }, { passive: true });
+
+  // Make the drag hint interactive: forward pointer events from the hint to the overlay
+  try {
+    const hintEl = document.getElementById('dragHint');
+    if (hintEl) {
+      // pointerdown should start the same drag behavior
+      hintEl.addEventListener('pointerdown', (ev) => {
+        // synthesize a mousedown on the overlay at the same clientX
+        ev.preventDefault();
+        overlay.onmousedown(synth(ev.clientX));
+        // capture subsequent pointer moves on document and forward them
+        const onMove = (m) => overlay.onmousemove(synth(m.clientX));
+        const onUp = () => { document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); overlay.onmouseup(); };
+        document.addEventListener('pointermove', onMove);
+        document.addEventListener('pointerup', onUp);
+      });
+      // Make hint cursor active on pointerenter to match overlay behavior
+      hintEl.addEventListener('pointerenter', () => { hintEl.style.cursor = 'grab'; });
+    }
+  } catch (e) {}
 }
 
 
