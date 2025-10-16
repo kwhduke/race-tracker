@@ -45,7 +45,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // ---------- Load and Populate ----------
   async function loadRaceData() {
     return new Promise((resolve, reject) => {
-      Papa.parse('data/2024_half_results.csv', {
+      Papa.parse('./2024_half_results.csv', {
+
         download: true,
         header: true,
         skipEmptyLines: true,
