@@ -3,6 +3,25 @@ document.addEventListener('DOMContentLoaded', () => {
   const ageInput = document.getElementById('age');
   const paceInput = document.getElementById('pace');
   const ageNumber = document.getElementById('ageNumber');
+  // --- AGE SYNC FIX (two-way binding + safe auto-update) ---
+  ageInput.addEventListener('input', e => {
+    const val = e.target.value;
+    ageNumber.value = val;
+  });
+
+  ageNumber.addEventListener('input', e => {
+    const val = e.target.value;
+    if (!isNaN(val)) ageInput.value = val;
+  });
+
+  // Optional: auto-refresh chart/results if already shown
+  [ageInput, ageNumber].forEach(el => {
+    el.addEventListener('change', () => {
+      if (!results.classList.contains('hidden')) {
+        renderResultsAndChart();
+      }
+    });
+  });
   const paceText = document.getElementById('paceText');
   const calcBtn = document.getElementById('calculate');
   const summaryText = document.getElementById('summaryText');
@@ -315,16 +334,35 @@ document.addEventListener('DOMContentLoaded', () => {
     // ---------- Chart Rendering ----------
 function renderDistributionChart(canvasId, filtered, userTime, labelText) {
   const ctx = document.getElementById(canvasId).getContext('2d');
+  const overlay = document.getElementById('highlightOverlay');
+  const hint = document.getElementById('dragHint') || document.querySelector('.drag-instruction');
+  overlay.style.display = 'block';
+  overlay.style.background = 'transparent';
   // Ensure internal units are seconds
   const chipTimes = filtered.map(r => toSeconds(r['Chip Time'])).filter(Boolean).sort((a,b)=>a-b);
 
+  // --- Chart range optimization (visual only) ---
   const bins = 80;
-  const minT = Math.min(...chipTimes);
-  const maxT = Math.max(...chipTimes);
+
+  // sort to determine percentile cutoffs
+  const sortedTimes = [...chipTimes].sort((a, b) => a - b);
+  const minT = sortedTimes[Math.floor(sortedTimes.length * 0.00)]; // fastest finisher
+  const maxT = sortedTimes[Math.floor(sortedTimes.length * 0.98)]; // ignore slowest 2%
+
+  // compute bins only within this range (no impact on stats)
   const step = (maxT - minT) / bins;
   const counts = Array(bins).fill(0);
-  chipTimes.forEach(t => counts[Math.min(bins - 1, Math.floor((t - minT) / step))]++);
+  chipTimes.forEach(t => {
+    if (t >= minT && t <= maxT) {
+      counts[Math.min(bins - 1, Math.floor((t - minT) / step))]++;
+    }
+  });
   const labels = counts.map((_, i) => minT + i * step);
+
+  // optional: slight padding so first/last bars aren’t flush
+  const visualPadding = (maxT - minT) * 0.01;
+  const chartMin = minT - visualPadding;
+  const chartMax = maxT + visualPadding;
 
   if (overallChart) overallChart.destroy();
 
@@ -335,6 +373,8 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
     const s = Math.floor(seconds % 60);
     return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
   };
+
+  // ...existing code... (touch handlers moved below after overlay is declared)
 
   // Ensure highlight globals exist before creating chart
   if (window._hzEnabled === undefined) window._hzEnabled = true;
@@ -354,7 +394,8 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
       }]
     },
     options: {
-      maintainAspectRatio: false,
+  maintainAspectRatio: false,
+  aspectRatio: 2.0, // slightly wider chart without affecting responsiveness
       animation: false,
       plugins: {
         legend: { display: false },
@@ -370,7 +411,9 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
       scales: {
         x: {
           type: 'linear',
-          title: { display: true, text: 'Finish Time (hours:minutes)' },
+          title: { display: true, text: 'Finish Time' },
+          min: chartMin,
+          max: chartMax,
           ticks: {
             callback: (v) => {
               const h = Math.floor(v / 3600);
@@ -430,8 +473,7 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
     }]
   });
 
-  const overlay = document.getElementById('highlightOverlay');
-  const hint = document.getElementById('dragHint') || document.querySelector('.drag-instruction');
+  // overlay and hint variables were declared earlier; ensure display/background set
   overlay.style.display = 'block';
   // ensure overlay is transparent so band is visible
   overlay.style.background = 'transparent';
@@ -534,6 +576,19 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
       try { if (hint) hint.style.animation = 'fadeInOut 3s ease-in-out forwards'; } catch (e) {}
     }, 10000);
   };
+
+  // --- Touch drag support (preserves desktop behavior) ---
+  overlay.addEventListener('touchstart', e => {
+    if (e.touches.length > 0) overlay.onmousedown(e.touches[0]);
+  }, { passive: true });
+
+  overlay.addEventListener('touchmove', e => {
+    if (e.touches.length > 0) overlay.onmousemove(e.touches[0]);
+  }, { passive: true });
+
+  overlay.addEventListener('touchend', () => {
+    overlay.onmouseup();
+  });
 }
 
 
