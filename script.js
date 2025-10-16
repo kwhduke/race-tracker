@@ -337,25 +337,44 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
   const overlay = document.getElementById('highlightOverlay');
   const hint = document.getElementById('dragHint') || document.querySelector('.drag-instruction');
   // --- Fade-in Drag Hint Near Highlight Zone ---
+  // --- Drag Hint Logic (auto-hide after real interaction) ---
   const dragHint = document.getElementById('dragHint');
+
+  // Show hint initially if not dismissed before
   if (dragHint && !localStorage.getItem('dragHintDismissed')) {
-    // make visible and let the CSS animation run
     dragHint.style.opacity = 1;
     dragHint.style.animationPlayState = 'running';
   }
 
-  // Once user interacts (click/drag/tap), fade out permanently
-  const hideDragHint = () => {
-    if (dragHint) {
-      dragHint.style.transition = 'opacity 0.5s ease';
-      dragHint.style.opacity = 0;
-      dragHint.style.animationPlayState = 'paused';
-      localStorage.setItem('dragHintDismissed', 'true');
-    }
-  };
+  // Hide permanently when user has clearly interacted (hover, tooltip, or tap)
+  function hideDragHint() {
+    if (!dragHint || localStorage.getItem('dragHintDismissed')) return;
+    dragHint.classList.add('dragHint-hide');
+    localStorage.setItem('dragHintDismissed', 'true');
+    setTimeout(() => (dragHint.style.display = 'none'), 800);
+    // Accessibility: announce that the hint was dismissed so screen readers update
+    try {
+      const ann = document.getElementById('announcer');
+      if (ann) ann.textContent = 'Drag hint dismissed';
+    } catch (e) {}
+  }
 
-  overlay.addEventListener('mousedown', hideDragHint);
-  overlay.addEventListener('touchstart', hideDragHint, { passive: true });
+  // Listen for *any* sign of interaction: pointermove or click
+  document.addEventListener('pointermove', hideDragHint, { once: true });
+  document.addEventListener('click', hideDragHint, { once: true });
+
+  // Also hide when Chart.js tooltip activates (guaranteed sign of drag/hover)
+  try {
+    if (overallChart && overallChart.tooltip && typeof overallChart.tooltip.draw === 'function') {
+      const origDraw = overallChart.tooltip.draw;
+      overallChart.tooltip.draw = function (...args) {
+        hideDragHint();
+        if (origDraw) return origDraw.apply(this, args);
+      };
+    }
+  } catch (e) {
+    // non-fatal: if Chart internals differ, we still have pointer/click fallback
+  }
   overlay.style.display = 'block';
   overlay.style.background = 'transparent';
   // Ensure internal units are seconds
@@ -400,6 +419,11 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
   if (window._hzEnabled === undefined) window._hzEnabled = true;
   window._hzUserMin = window._hzUserMin || userTime;
 
+  // create a soft vertical gradient for the chart fill
+  const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height);
+  gradient.addColorStop(0, 'rgba(80, 150, 255, 0.25)');
+  gradient.addColorStop(1, 'rgba(80, 150, 255, 0.0)');
+
   overallChart = new Chart(ctx, {
     type: 'line',
     data: {
@@ -407,10 +431,12 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
       datasets: [{
         label: labelText,
         data: counts,
-        borderColor: '#111',
-        borderWidth: 1.6,
+        borderColor: 'rgba(60, 140, 255, 0.9)',
+        borderWidth: 2.5,
         pointRadius: 0,
-        tension: 0.25
+        tension: 0.35,
+        backgroundColor: gradient,
+        fill: true
       }]
     },
     options: {
@@ -418,10 +444,12 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
   aspectRatio: 2.0, // slightly wider chart without affecting responsiveness
       animation: false,
       plugins: {
-        legend: { display: false },
+        legend: { display: false, labels: { color: '#222' } },
         tooltip: {
           mode: 'index',
           intersect: false,
+          titleColor: '#111',
+          bodyColor: '#333',
           callbacks: {
             title: (tooltipItems) => `Time: ${formatHMS(+tooltipItems[0].label)}`,
             label: (ctx) => `${ctx.formattedValue} runners`
@@ -431,6 +459,8 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
       scales: {
         x: {
           type: 'linear',
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          border: { color: 'rgba(0,0,0,0.1)' },
           title: { display: true, text: 'Finish Time' },
           min: chartMin,
           max: chartMax,
@@ -443,6 +473,8 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
           }
         },
         y: {
+          grid: { color: 'rgba(0,0,0,0.05)' },
+          border: { color: 'rgba(0,0,0,0.1)' },
           title: { display: true, text: 'Number of Runners' }
         }
       },
@@ -503,7 +535,7 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
   let startBaseTime = null; // anchor (seconds) for the current drag
 
   // Show initial animated cue on load (only if not dismissed)
-  try { if (dragHint && !localStorage.getItem('dragHintDismissed')) { dragHint.style.animation = 'dragFade 3s ease-in-out infinite'; } } catch (e) {}
+  try { if (dragHint && !localStorage.getItem('dragHintDismissed')) { dragHint.style.animation = 'dragPulse 2.8s ease-in-out infinite'; } } catch (e) {}
 
   overlay.onmousedown = e => {
     dragging = true;
@@ -595,7 +627,7 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
     // Show cue again after 10s idle (only if not dismissed)
     clearTimeout(hintTimer);
     hintTimer = setTimeout(() => {
-      try { if (dragHint && !localStorage.getItem('dragHintDismissed')) dragHint.style.animation = 'dragFade 3s ease-in-out infinite'; } catch (e) {}
+      try { if (dragHint && !localStorage.getItem('dragHintDismissed')) dragHint.style.animation = 'dragPulse 2.8s ease-in-out infinite'; } catch (e) {}
     }, 10000);
   };
 
