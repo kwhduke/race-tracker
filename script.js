@@ -522,7 +522,9 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
     clearTimeout(hintTimer);
   };
   overlay.onmousemove = e => {
-    if (!dragging) return;
+  if (!dragging) return;
+  // Prevent invalid touch data from triggering NaN calculations
+  if (isNaN(e.offsetX) || e.offsetX === undefined) return;
     const deltaX = e.offsetX - startX;
     const secondsPerPixel = overlay.offsetWidth > 0 ? (maxT - minT) / overlay.offsetWidth : 0;
     // compute compTime relative to startBaseTime so drags continue from last compare position
@@ -603,8 +605,12 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
     return Math.max(0, Math.min(rect.width, (clientX - rect.left)));
   };
 
-  // Helper: create a synthetic event that includes offsetX for our existing handlers
-  const synth = (clientX) => ({ offsetX: offsetXFromClient(clientX) });
+  // Synthetic event with full mouse-like shape for touch support
+  const synth = (clientX) => ({
+    offsetX: offsetXFromClient(clientX),
+    clientX: clientX,
+    layerX: offsetXFromClient(clientX)
+  });
 
   // --- Fixed mobile touch drag (no NaN, preserves stickiness) ---
   const firstTouch = (e) => e.touches?.[0] || e.changedTouches?.[0];
