@@ -336,6 +336,26 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
   const ctx = document.getElementById(canvasId).getContext('2d');
   const overlay = document.getElementById('highlightOverlay');
   const hint = document.getElementById('dragHint') || document.querySelector('.drag-instruction');
+  // --- Fade-in Drag Hint Near Highlight Zone ---
+  const dragHint = document.getElementById('dragHint');
+  if (dragHint && !localStorage.getItem('dragHintDismissed')) {
+    // make visible and let the CSS animation run
+    dragHint.style.opacity = 1;
+    dragHint.style.animationPlayState = 'running';
+  }
+
+  // Once user interacts (click/drag/tap), fade out permanently
+  const hideDragHint = () => {
+    if (dragHint) {
+      dragHint.style.transition = 'opacity 0.5s ease';
+      dragHint.style.opacity = 0;
+      dragHint.style.animationPlayState = 'paused';
+      localStorage.setItem('dragHintDismissed', 'true');
+    }
+  };
+
+  overlay.addEventListener('mousedown', hideDragHint);
+  overlay.addEventListener('touchstart', hideDragHint, { passive: true });
   overlay.style.display = 'block';
   overlay.style.background = 'transparent';
   // Ensure internal units are seconds
@@ -482,8 +502,8 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
   let hintTimer = null;
   let startBaseTime = null; // anchor (seconds) for the current drag
 
-  // Show initial animated cue on load
-  try { if (hint) { hint.style.animation = 'fadeInOut 3s ease-in-out forwards'; } } catch (e) {}
+  // Show initial animated cue on load (only if not dismissed)
+  try { if (dragHint && !localStorage.getItem('dragHintDismissed')) { dragHint.style.animation = 'dragFade 3s ease-in-out infinite'; } } catch (e) {}
 
   overlay.onmousedown = e => {
     dragging = true;
@@ -570,25 +590,53 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
       }
     } catch (err) { /* ignore */ }
 
-    // Show cue again after 10s idle
+    // Show cue again after 10s idle (only if not dismissed)
     clearTimeout(hintTimer);
     hintTimer = setTimeout(() => {
-      try { if (hint) hint.style.animation = 'fadeInOut 3s ease-in-out forwards'; } catch (e) {}
+      try { if (dragHint && !localStorage.getItem('dragHintDismissed')) dragHint.style.animation = 'dragFade 3s ease-in-out infinite'; } catch (e) {}
     }, 10000);
   };
 
-  // --- Touch drag support (preserves desktop behavior) ---
+  // Helper: compute "offsetX" from a clientX-like point relative to the overlay
+  const offsetXFromClient = (clientX) => {
+    const rect = overlay.getBoundingClientRect();
+    return Math.max(0, Math.min(rect.width, (clientX - rect.left)));
+  };
+
+  // Helper: create a synthetic event that includes offsetX for our existing handlers
+  const synth = (clientX) => ({ offsetX: offsetXFromClient(clientX) });
+
+  // --- Fixed mobile touch drag (no NaN, preserves stickiness) ---
+  const firstTouch = (e) => e.touches?.[0] || e.changedTouches?.[0];
+
   overlay.addEventListener('touchstart', e => {
-    if (e.touches.length > 0) overlay.onmousedown(e.touches[0]);
+    const t = firstTouch(e);
+    if (!t) return;
+    // ripple feedback (non-blocking)
+    try {
+      const r = document.createElement('div');
+      r.className = 'drag-ripple';
+      const rect = overlay.getBoundingClientRect();
+      r.style.left = `${t.clientX - rect.left}px`;
+      r.style.top = `${t.clientY - rect.top}px`;
+      overlay.appendChild(r);
+      setTimeout(() => r.remove(), 520);
+    } catch (_) {}
+
+    overlay.onmousedown(synth(t.clientX));
   }, { passive: true });
 
   overlay.addEventListener('touchmove', e => {
-    if (e.touches.length > 0) overlay.onmousemove(e.touches[0]);
-  }, { passive: true });
+    const t = firstTouch(e);
+    if (!t) return;
+    // while dragging we allow preventDefault to avoid page scroll
+    e.preventDefault();
+    overlay.onmousemove(synth(t.clientX));
+  }, { passive: false });
 
   overlay.addEventListener('touchend', () => {
     overlay.onmouseup();
-  });
+  }, { passive: true });
 }
 
 

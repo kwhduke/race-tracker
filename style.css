@@ -151,16 +151,36 @@ input[type="range"] {
 .explore input[type=range] { width:100%; }
 .exit-explore { background:none; border:1px solid #ddd; padding:4px 8px; border-radius:6px; cursor:pointer; }
 
-/* overlay used for direct chart drag interactions */
+/* --- Full-width invisible drag overlay --- */
 #highlightOverlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;               /* top/left/right/bottom: 0 */
+  width: 100%;
+  height: 100%;
   cursor: ew-resize;
+  z-index: 15;            /* above canvas, below drag hint (20) */
   background: transparent;
-  z-index: 10;
+  touch-action: none;     /* ensure touch events are delivered for dragging */
+}
+
+/* Ripple created at drag start (auto-removed by JS) */
+.drag-ripple {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  left: 0; top: 0;
+  border-radius: 999px;
+  background: rgba(17,17,17,0.18);
+  transform: translate(-50%, -50%) scale(1);
+  animation: ripplePop 500ms ease-out forwards;
+  pointer-events: none;
+  z-index: 18;
+}
+
+@keyframes ripplePop {
+  0%   { opacity: 0.0; transform: translate(-50%, -50%) scale(0.8); }
+  20%  { opacity: 1.0; }
+  100% { opacity: 0.0; transform: translate(-50%, -50%) scale(6); }
 }
 
 
@@ -171,22 +191,28 @@ input[type="range"] {
   margin-top: 0.6rem;
 }
 
-/* Animated "Drag ⇆" cue under chart */
+/* --- Drag Hint Positioned Near Highlighted Zone --- */
 #dragHint {
-  text-align: center;
-  font-size: 0.9rem;
-  color: #777;
-  margin-top: 4px;
-  opacity: 0;
+  position: absolute;
+  left: 50%;
+  top: 38%; /* roughly above highlight band midpoint */
+  transform: translateX(-50%);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: rgba(40, 40, 40, 0.85);
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(0, 0, 0, 0.05);
+  border-radius: 8px;
+  padding: 4px 10px;
+  z-index: 20;
   pointer-events: none;
-  animation: fadeInOut 3s ease-in-out forwards;
+  opacity: 0;
+  animation: dragFade 3s ease-in-out infinite;
 }
 
-@keyframes fadeInOut {
-  0% { opacity: 0; transform: translateY(4px); }
-  10% { opacity: 1; transform: translateY(0); }
-  80% { opacity: 1; }
-  100% { opacity: 0; }
+@keyframes dragFade {
+  0%, 100% { opacity: 0; transform: translate(-50%, -2px); }
+  20%, 80% { opacity: 1; transform: translate(-50%, 0); }
 }
 
 /* Floating label shown while dragging highlight band */
@@ -511,4 +537,25 @@ input[type="range"] {
   border-radius: 6px;
   box-sizing: border-box;
   line-height: 1.1;
+}
+
+/* --- MOBILE CARD WRAP FIX --- */
+@media (max-width: 768px) {
+  .cards-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px; /* slightly tighter on mobile */
+    overflow-x: hidden; /* prevent horizontal scroll */
+  }
+
+  .result-card {
+    flex: none;
+    width: 100%;
+    min-width: 0; /* override desktop min width */
+    box-sizing: border-box;
+  }
+
+  .results section {
+    padding: 14px 16px;
+  }
 }
