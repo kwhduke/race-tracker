@@ -64,7 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // ✅ Use your real S3 file with CORS enabled
 async function loadRaceData() {
   return new Promise((resolve, reject) => {
-    const CSV_URL = "https://finishline.s3.us-east-2.amazonaws.com/2024_half_results.csv";
+    const CSV_URL = "https://raw.githubusercontent.com/kwhduke/race-tracker/refs/heads/main/2024_half_results.csv";
 
   console.log(`🚀 FinishLine: Starting Papa.parse fetch for URL: ${CSV_URL}`);
     Papa.parse(CSV_URL, {
