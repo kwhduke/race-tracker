@@ -61,27 +61,46 @@ document.addEventListener('DOMContentLoaded', () => {
     return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
   }
 
-  // ---------- Load and Populate ----------
-  async function loadRaceData() {
-    return new Promise((resolve, reject) => {
-      Papa.parse('./2024_half_results.csv', {
+  // ✅ Use your real S3 file with CORS enabled
+async function loadRaceData() {
+  return new Promise((resolve, reject) => {
+    const CSV_URL = "https://finishline.s3.us-east-2.amazonaws.com/2024_half_results.csv";
 
-        download: true,
-        header: true,
-        skipEmptyLines: true,
-        complete: (res) => {
-          const rows = res.data.filter(r => r.event_name && r['Chip Time']);
+  console.log(`🚀 FinishLine: Starting Papa.parse fetch for URL: ${CSV_URL}`);
+    Papa.parse(CSV_URL, {
+      download: true,
+      header: true,
+      skipEmptyLines: true,
+      complete: (res) => {
+        try {
+          const totalRows = Array.isArray(res.data) ? res.data.length : 0;
+          const rows = res.data.filter(r => r.event_name && r["Chip Time"]);
+          console.log(`🚀 FinishLine: Papa.parse complete — raw rows=${totalRows}, filtered rows=${rows.length}`);
+          console.log('🚀 FinishLine: Preview rows:', rows.slice(0, 3));
+          if (!rows.length) console.warn('🚀 FinishLine: Warning — no rows found after filtering CSV');
+          console.log('🚀 FinishLine: Populating race dropdown...');
           populateRaceDropdown(rows);
+          console.log('🚀 FinishLine: Race dropdown populated');
           resolve(rows);
-        },
-        error: reject
-      });
+        } catch (err) {
+          console.error('🚀 FinishLine: Error processing Papa.parse result', err && err.stack ? err.stack : err);
+          reject(err);
+        }
+      },
+      error: (err) => {
+        console.error('🚀 FinishLine: Papa.parse failed', err && err.stack ? err.stack : err);
+        reject(err);
+      }
     });
-  }
+  });
+}
+
 
   function populateRaceDropdown(rows) {
-    const unique = [...new Set(rows.map(r => (r.event_name || '').trim()))].filter(Boolean);
-    raceSelect.innerHTML = unique.map(r => `<option value="${r}">${r}</option>`).join('');
+  console.log(`🚀 FinishLine: populateRaceDropdown start — total rows=${rows.length}`);
+  const unique = [...new Set(rows.map(r => (r.event_name || '').trim()))].filter(Boolean);
+  raceSelect.innerHTML = unique.map(r => `<option value="${r}">${r}</option>`).join('');
+  console.log(`🚀 FinishLine: populateRaceDropdown complete — unique races=${unique.length}`);
   }
 
   // ---------- Event Handlers ----------
@@ -701,6 +720,7 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
 
 
   (async function init() {
+    console.log('🚀 FinishLine: init() called');
     try {
       raceData = await loadRaceData();
       console.log('✅ Loaded', raceData.length, 'rows');
@@ -709,3 +729,11 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
     }
   })();
 });
+
+// Ensure init is wired to DOMContentLoaded if a global init exists; otherwise note internal invocation
+if (typeof init === 'function') {
+  window.addEventListener('DOMContentLoaded', init);
+  console.log('🚀 FinishLine: window.addEventListener("DOMContentLoaded", init) attached');
+} else {
+  console.log('🚀 FinishLine: init() is not a global function; initialized internally on DOMContentLoaded');
+}
