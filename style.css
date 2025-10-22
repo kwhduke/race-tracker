@@ -97,6 +97,15 @@ input[type="range"] {
   color: #fff;
 }
 
+/* Disabled toggle state when data for that distance isn't present */
+.toggle.disabled {
+  background: #f1f1f4;
+  color: #999;
+  pointer-events: none;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 .radio-group {
   display: flex;
   gap: 14px;

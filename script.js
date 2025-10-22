@@ -30,6 +30,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let raceData = [];
   let overallChart = null;
+  let fullDataLoaded = false; // becomes true when the full CSV has finished parsing
+  let previewLoaded = false;  // true when we have a quick sample to populate the dropdown
+  const _RACE_NAMES_KEY = 'raceNames_v1';
 
 
   // highlight drawing is handled per-chart in renderDistributionChart to avoid double draw
@@ -100,17 +103,81 @@ async function loadRaceData() {
   console.log(`🚀 FinishLine: populateRaceDropdown start — total rows=${rows.length}`);
   const unique = [...new Set(rows.map(r => (r.event_name || '').trim()))].filter(Boolean);
   raceSelect.innerHTML = unique.map(r => `<option value="${r}">${r}</option>`).join('');
-  console.log(`🚀 FinishLine: populateRaceDropdown complete — unique races=${unique.length}`);
+    console.log(`🚀 FinishLine: populateRaceDropdown complete — unique races=${unique.length}`);
+    // persist quick list for next-visit instant population (non-sensitive small cache)
+    try { localStorage.setItem(_RACE_NAMES_KEY, JSON.stringify(unique)); } catch (e) {}
   }
 
+    // Quick preview loader: fetch header + sample of rows so UX can populate instantly
+    function loadRacePreview() {
+      return new Promise((resolve, reject) => {
+        const CSV_URL = "https://raw.githubusercontent.com/kwhduke/race-tracker/refs/heads/main/2024_half_results.csv";
+        console.log('✅ FinishLine: starting race preview (Papa.parse preview:200)');
+        Papa.parse(CSV_URL, {
+          download: true,
+          header: true,
+          skipEmptyLines: true,
+          preview: 200,
+          complete: (res) => {
+            try {
+              const rows = Array.isArray(res.data) ? res.data.filter(r => r.event_name) : [];
+              console.log('✅ FinishLine: race preview ready — preview rows=', Math.min(rows.length, 200));
+              if (rows.length) populateRaceDropdown(rows);
+              previewLoaded = true;
+              resolve(rows);
+            } catch (err) { console.error('✅ FinishLine: race preview error', err); reject(err); }
+          },
+          error: (err) => { console.error('✅ FinishLine: race preview failed', err); reject(err); }
+        });
+      });
+    }
+
   // ---------- Event Handlers ----------
+  // Toggle click handling: ignore disabled toggles
   toggles.forEach(t => {
     t.addEventListener('click', () => {
+      if (t.classList.contains('disabled')) return;
       toggles.forEach(x => x.classList.remove('active'));
       t.classList.add('active');
       results.classList.add('hidden');
     });
   });
+
+  // Update which distance toggles are enabled based on loaded data
+  function updateToggleAvailability() {
+    const hasMarathon = raceData.some(r => r.event_type === 'Marathon');
+    const hasHalf = raceData.some(r => r.event_type === 'Half Marathon');
+    toggles.forEach(btn => {
+      const val = btn.dataset && btn.dataset.value;
+      if (val === 'Marathon') {
+        if (!hasMarathon) {
+          btn.classList.add('disabled');
+          btn.classList.remove('active');
+        } else {
+          btn.classList.remove('disabled');
+        }
+      }
+      if (val === 'Half Marathon') {
+        if (!hasHalf) {
+          btn.classList.add('disabled');
+          btn.classList.remove('active');
+        } else {
+          btn.classList.remove('disabled');
+        }
+      }
+    });
+
+    // Default preference: Marathon if available, otherwise Half Marathon
+    const marathonBtn = Array.from(toggles).find(b => b.dataset && b.dataset.value === 'Marathon');
+    const halfBtn = Array.from(toggles).find(b => b.dataset && b.dataset.value === 'Half Marathon');
+    if (marathonBtn && !marathonBtn.classList.contains('disabled')) {
+      toggles.forEach(x => x.classList.remove('active'));
+      marathonBtn.classList.add('active');
+    } else if (halfBtn && !halfBtn.classList.contains('disabled')) {
+      toggles.forEach(x => x.classList.remove('active'));
+      halfBtn.classList.add('active');
+    }
+  }
 
   // keep slider and text synced
   paceInput.addEventListener('input', e => {
@@ -129,7 +196,11 @@ async function loadRaceData() {
   });
 
   calcBtn.addEventListener('click', () => {
-    if (!raceData.length) return alert('Data not yet loaded.');
+    // If the full dataset hasn't finished loading yet, show a small non-blocking note
+    if (!fullDataLoaded) {
+      showTransientNote(calcBtn, '⏳ Loading full results… please wait a moment.', 4000);
+      return;
+    }
     renderResultsAndChart();
     // re-anchor highlight band to newly calculated finishTime
     try {
@@ -169,11 +240,13 @@ async function loadRaceData() {
     const chipTimes = filtered.map(r => toSeconds(r['Chip Time'])).filter(Boolean).sort((a, b) => a - b);
     const total = chipTimes.length;
 
-    // Find nearest placement
-    const idx = chipTimes.findIndex(t => t >= finishTime);
-    const overallPlace = idx === -1 ? total : idx + 1;
-    const percentile = ((total - overallPlace) / total * 100).toFixed(1);
-    const invertedPercentile = (100 - percentile).toFixed(1);
+  // Compute placement by counting strictly faster runners to avoid edge cases at extremes
+  const fasterCount = chipTimes.filter(t => t < finishTime).length;
+  const overallPlace = fasterCount + 1;
+  const percentileNum = chipTimes.length ? ((chipTimes.length - overallPlace) / chipTimes.length) * 100 : 0;
+  const invertedNum = 100 - percentileNum;
+  const percentile = percentileNum.toFixed(1);
+  const invertedPercentile = invertedNum.toFixed(1);
 
     // Gender placement: prefer 'Place Gender' (e.g. "1 M" or "2 F") if present, otherwise fall back to 'Gender'
     const userGender = gender && typeof gender === 'string' ? gender.charAt(0).toUpperCase() : '';
@@ -189,27 +262,43 @@ async function loadRaceData() {
   const genderPercentile = genderTotal > 0 ? ((genderTotal - genderPlace) / genderTotal * 100).toFixed(1) : '0.0';
   const genderTop = genderTotal > 0 ? (100 - parseFloat(genderPercentile)).toFixed(1) : '100.0';
 
-    // Division placement (e.g. M30-34)
-    const division = `${gender.charAt(0)}${Math.floor(age / 5) * 5}-${Math.floor(age / 5) * 5 + 4}`;
-    const divisionData = filtered.filter(d => {
-      const pd = d['Place Div'] || '';
-      const match = pd.match(/([MF][0-9]{2}-[0-9]{2})/);
-      return match ? match[1] === division : false;
-    });
-    const divTimes = divisionData.map(r => toSeconds(r['Chip Time'])).filter(Boolean).sort((a, b) => a - b);
-    const dIdx = divTimes.findIndex(t => t >= finishTime);
-    const divisionPlace = dIdx === -1 ? divTimes.length : dIdx + 1;
-    const divTotal = divTimes.length;
-  const divisionPercentile = divTotal > 0 ? ((divTotal - divisionPlace) / divTotal * 100).toFixed(1) : '0.0';
-  const divisionTop = divTotal > 0 ? (100 - parseFloat(divisionPercentile)).toFixed(1) : '100.0';
+    // Division placement (use Gender initial + Age columns directly)
+    const userAgeRange = findClosestAgeRange(age);
+    const userGenderInitial = (gender || '').charAt(0).toUpperCase(); // 'M' or 'F'
+    const division = `${userGenderInitial}${userAgeRange}`;
 
-    // Summary
-    summaryText.innerHTML = `
-      Your estimated completion time for the <strong>${selectedType}</strong> is
-      <strong>${formatTime(finishTime)}</strong>.<br>
-      Based on last year's results, you'd finish around
-      <strong>#${overallPlace} out of ${total}</strong> (<strong>top ${invertedPercentile}%</strong> overall).
-    `;
+    const divisionData = filtered.filter(d => {
+      const dGender = (d['Gender'] || '').toString().trim().toUpperCase(); // 'M'/'F'
+      const dAge = (d['Age'] || '').toString().trim(); // e.g. '30-34'
+      return dGender === userGenderInitial && dAge === userAgeRange;
+    });
+
+    const divTimes = divisionData
+      .map(r => toSeconds(r['Chip Time']))
+      .filter(Boolean)
+      .sort((a, b) => a - b);
+
+    const divisionPlace = divTimes.length ? (divTimes.filter(t => t < finishTime).length + 1) : 'N/A';
+    const divTotal = divTimes.length;
+    const divisionPercentile = divTotal ? ((divTotal - (divisionPlace || divTotal)) / divTotal * 100).toFixed(1) : 'N/A';
+    const divisionTop = divTotal ? (100 - parseFloat(divisionPercentile)).toFixed(1) : 'N/A';
+
+    // Summary (avoid repeating the distance if it's already in the race name;
+    // render as a single paragraph)
+    const esc = s => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    let displayTitle = raceName || selectedType;
+    try {
+      const rn = (raceName || '').toString().trim();
+      const st = (selectedType || '').toString().trim();
+      if (rn && st) {
+        // if raceName already contains the distance text (case-insensitive), don't append it
+        if (rn.toLowerCase().includes(st.toLowerCase())) displayTitle = rn;
+        else displayTitle = `${rn} ${st}`;
+      } else if (rn) displayTitle = rn;
+      else displayTitle = st;
+    } catch (e) { displayTitle = raceName || selectedType; }
+
+    summaryText.innerHTML = `<p>Your estimated completion time for the <strong>${esc(displayTitle)}</strong> is <strong>${esc(formatTime(finishTime))}</strong>. Based on last year's results, you'd finish around <strong>#${esc(overallPlace)} out of ${esc(total)}</strong> (<strong>top ${esc(invertedPercentile)}%</strong> overall).</p>`;
 
     // Placement cards
     document.getElementById('placementRow').innerHTML = `
@@ -271,8 +360,9 @@ async function loadRaceData() {
     const roundCounts = {};
     rounded.forEach(m => { roundCounts[m] = (roundCounts[m] || 0) + 1; });
     const topRounded = Object.entries(roundCounts).sort((a,b)=>b[1]-a[1])[0];
-    const ftModeMin = topRounded ? parseInt(topRounded[0],10) : null;
-    const ftLines = `Average: ${formatTime(ftAvg)}\nMedian: ${formatTime(ftMed)}\nMode: ${ftModeMin !== null ? ftModeMin + 'm' : '—'}`;
+  const ftModeMin = topRounded ? parseInt(topRounded[0],10) : null;
+  const ftModeDisplay = ftModeMin !== null ? formatTime(ftModeMin * 60) : '—';
+  const ftLines = `Average: ${formatTime(ftAvg)}\nMedian: ${formatTime(ftMed)}\nMode: ${ftModeDisplay}`;
     const ftHtml = `<pre class="stat-list" style="text-align:center; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', 'Segoe UI Mono', monospace;">${ftLines}</pre>`;
 
     document.getElementById('demographicsRow').innerHTML =
@@ -314,7 +404,7 @@ async function loadRaceData() {
 
     document.getElementById('performanceRow').innerHTML =
       `${card('Finish Times', ftHtml, '')}
-       ${card('Pace', paceHtml, `${selectedType} (${distance} mi)`)}`;
+       ${card('Pace', paceHtml)}`;
 
     results.classList.remove('hidden');
 
@@ -340,6 +430,14 @@ async function loadRaceData() {
     if (!value) return '';
     const m = value.toString().match(/([MF])/i);
     return m ? m[1].toUpperCase() : '';
+  }
+
+  // Given numeric age, return the age-range string used in CSV, e.g. 27 -> '25-29'
+  function findClosestAgeRange(ageNum) {
+    if (!ageNum || isNaN(ageNum)) return '';
+    const lower = Math.floor(ageNum / 5) * 5;
+    const upper = lower + 4;
+    return `${lower}-${upper}`;
   }
 
   function renderList(items) {
@@ -719,13 +817,73 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
 
 
 
-  (async function init() {
-    console.log('🚀 FinishLine: init() called');
+  // transient note helper (shows a small message near a node for `ms` milliseconds)
+  function showTransientNote(anchorEl, message, ms = 3000) {
     try {
-      raceData = await loadRaceData();
-      console.log('✅ Loaded', raceData.length, 'rows');
+      let note = document.getElementById('calcNote');
+      if (!note) {
+        note = document.createElement('div');
+        note.id = 'calcNote';
+        note.setAttribute('role', 'status');
+        note.style.marginTop = '8px';
+        note.style.fontSize = '0.92rem';
+        note.style.color = '#444';
+        anchorEl.parentElement.appendChild(note);
+      }
+      note.textContent = message;
+      note.style.opacity = '1';
+      clearTimeout(note._t);
+      note._t = setTimeout(() => { try { note.style.opacity = '0'; note.remove(); } catch (e) {} }, ms);
+    } catch (e) {}
+  }
+
+  (async function init() {
+    console.log('🚀 FinishLine: init() called — loading preview first');
+    // If we have a cached list of race names from a prior visit, populate immediately
+    try {
+      const cached = localStorage.getItem(_RACE_NAMES_KEY);
+      if (cached) {
+        const names = JSON.parse(cached || '[]');
+        if (Array.isArray(names) && names.length) {
+          raceSelect.innerHTML = names.map(r => `<option value="${r}">${r}</option>`).join('');
+          console.log('✅ FinishLine: populated race dropdown from cached names');
+        }
+      }
+    } catch (e) {}
+
+    try {
+      // Fast preview to show the dropdown quickly
+      await loadRacePreview();
+
+      // Start full data load in background (quiet, non-blocking)
+      setTimeout(() => {
+        loadRaceData().then(rows => {
+          try {
+            // if the full dataset contains new race names, re-populate the dropdown
+            const previewNames = Array.from(new Set((Array.from(raceSelect.options) || []).map(o => o.value)));
+            const fullNames = Array.from(new Set(rows.map(r => (r.event_name || '').trim()))).filter(Boolean);
+            const newNames = fullNames.filter(n => !previewNames.includes(n));
+            if (newNames.length) {
+              // Merge and repopulate preserving order: full dataset preferred
+              const merged = Array.from(new Set([...fullNames, ...previewNames]));
+              raceSelect.innerHTML = merged.map(r => `<option value="${r}">${r}</option>`).join('');
+              console.log('✅ FinishLine: dropdown updated with new race names from full dataset');
+            }
+            // replace preview data with full data set
+            raceData = rows;
+            fullDataLoaded = true;
+            console.log('✅ FinishLine: full dataset loaded — rows=', raceData.length);
+            try { if (typeof updateToggleAvailability === 'function') updateToggleAvailability(); } catch (e) {}
+          } catch (err) { console.error('✅ FinishLine: post-full-load processing error', err); }
+        }).catch(err => { console.error('✅ FinishLine: full dataset load failed', err); });
+      }, 300);
+
     } catch (e) {
-      console.error('❌ Failed to load CSV', e);
+      console.error('❌ FinishLine: preview load failed', e);
+      // Fallback: still attempt full load
+      try {
+        loadRaceData().then(rows => { raceData = rows; fullDataLoaded = true; try { if (typeof updateToggleAvailability === 'function') updateToggleAvailability(); } catch (e) {} });
+      } catch (er) { console.error('Failed fallback full load', er); }
     }
   })();
 });
