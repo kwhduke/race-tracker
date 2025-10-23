@@ -284,8 +284,8 @@ if (defaultFemaleBtn) defaultFemaleBtn.classList.add('active');
     // Gender placement: prefer 'Place Gender' (e.g. "1 M" or "2 F") if present, otherwise fall back to 'Gender'
     const userGender = gender && typeof gender === 'string' ? gender.charAt(0).toUpperCase() : '';
     const genderFiltered = filtered.filter(r => {
-      const pg = r['Place Gender'] || r['Gender'] || '';
-      return extractGender(pg) === userGender;
+      const g = (r['Gender'] || r['Place Gender'] || '').trim().toUpperCase();
+      return g.startsWith(userGender); // works for 'F', 'Female', 'M', 'Male'
     });
     const genderTimes = genderFiltered.map(r => toSeconds(r['Chip Time'])).filter(Boolean).sort((a, b) => a - b);
     const gIdx = genderTimes.findIndex(t => t >= finishTime);
@@ -342,10 +342,10 @@ if (defaultFemaleBtn) defaultFemaleBtn.classList.add('active');
 
 
     // Smooth scroll to results
-const resultsSection = document.querySelector(".results");
-if (resultsSection) {
-  resultsSection.scrollIntoView({ behavior: "smooth", block: "start" });
-}
+    const resultsSection = document.getElementById("results");
+    if (resultsSection) {
+      resultsSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
 
     // Demographic & performance cards
     const ages = filtered.map(d => { const a = parseInt(d.Age); return isNaN(a) ? null : a; }).filter(Boolean);
