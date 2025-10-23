@@ -178,10 +178,13 @@ if (defaultFemaleBtn) defaultFemaleBtn.classList.add('active');
   if (!selectedRace || !raceData.length) return;
 
   const thisRaceRows = raceData.filter(
-    r => (r.event_name || '').toLowerCase() === selectedRace.toLowerCase()
+  r => (r.event_name || '').toLowerCase().includes(selectedRace.toLowerCase())
   );
   const hasHalf = thisRaceRows.some(r => (r.event_type || '').toLowerCase().includes('half'));
-  const hasFull = thisRaceRows.some(r => (r.event_type || '').toLowerCase().includes('full'));
+  const hasFull = thisRaceRows.some(r => {
+    const type = (r.event_type || '').toLowerCase();
+    return type.includes('full') || type === 'marathon';
+  });
 
   const halfBtn = document.querySelector('#distanceToggle .toggle-distance[data-value="Half Marathon"]');
   const fullBtn = document.querySelector('#distanceToggle .toggle-distance[data-value="Marathon"]');
@@ -195,14 +198,26 @@ if (defaultFemaleBtn) defaultFemaleBtn.classList.add('active');
   // Always prefer Marathon by default
   selectedDistance = 'Marathon';
 
-  // Disable Half if missing data
-  if (!hasHalf && halfBtn) halfBtn.classList.add('disabled');
+  // Always default to Marathon (Full)
+selectedDistance = 'Marathon';
 
-  // Activate Marathon by default if it exists
-  if (fullBtn) fullBtn.classList.add('active');
+// Reset button states
+[halfBtn, fullBtn].forEach(btn => {
+  if (!btn) return;
+  btn.classList.remove('disabled', 'active');
+});
 
-  // If Marathon data doesn’t exist but Half does, fallback
-  if (!hasFull && hasHalf) {
+// Check available distances
+  if (!hasHalf && halfBtn) {
+    // No half data — disable it
+    halfBtn.classList.add('disabled');
+  }
+
+  if (hasFull && fullBtn) {
+    // Full exists — make it active
+    fullBtn.classList.add('active');
+  } else if (!hasFull && hasHalf) {
+    // Only half exists — make half active instead
     if (fullBtn) fullBtn.classList.add('disabled');
     if (halfBtn) {
       halfBtn.classList.remove('disabled');
