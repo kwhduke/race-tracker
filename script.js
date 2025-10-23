@@ -446,7 +446,9 @@ if (defaultFemaleBtn) defaultFemaleBtn.classList.add('active');
       `${card('Finish Times', ftHtml, '')}
        ${card('Pace', paceHtml)}`;
 
+   
     results.classList.remove('hidden');
+    results.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     // Chart rendering (userTime in minutes)
     try {
