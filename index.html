@@ -24,6 +24,12 @@
       <p class="subheader">See how you’d perform compared to last year’s results.</p>
     </header>
 
+    <img 
+  src="https://kyos-article-images.s3.us-east-2.amazonaws.com/article_images/960.png" 
+  alt="Runner background illustration"
+  class="header-banner-img"
+/>
+
     <!-- Input Section -->
     <section class="input-section">
       <div class="form-grid">
@@ -34,18 +40,19 @@
 
         <div class="input-group">
           <label>Distance</label>
-          <div class="toggle-group">
-            <button class="toggle active" data-value="Half Marathon">Half</button>
-            <button class="toggle" data-value="Marathon">Full</button>
+          <div class="toggle-group" id="distanceToggle">
+            <button class="toggle-distance" data-value="Marathon">Full</button>
+            <button class="toggle-distance" data-value="Half Marathon">Half</button>
           </div>
         </div>
+      
 
         <div class="input-group">
           <label>Gender</label>
-          <div class="radio-group">
-            <label><input type="radio" name="gender" value="Male" checked> Male</label>
-            <label><input type="radio" name="gender" value="Female"> Female</label>
-            <label><input type="radio" name="gender" value="Non-Binary"> Non-Binary</label>
+          <div class="toggle-group" id="genderToggle">
+            <div class="toggle" data-value="Male">Male</div>
+            <div class="toggle" data-value="Female">Female</div>
+            <div class="toggle" data-value="Non-Binary">Non-Binary</div>
           </div>
         </div>
 

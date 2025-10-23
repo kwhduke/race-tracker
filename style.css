@@ -77,25 +77,54 @@ input[type="range"] {
 
 .toggle-group {
   display: inline-flex;
-  border: 1px solid #ccc;
   border-radius: 10px;
   overflow: hidden;
+  width: 100%;
+  max-width: 380px;
 }
 
-.toggle {
-  padding: 8px 14px;
-  background: #fff;
+
+.toggle,
+.toggle-distance {
+  flex: 1;
+  background: #f8f8f8;
   color: #111;
   border: none;
-  min-width: 84px;
+  padding: 0;
+  font-size: 0.80rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s ease, color 0.2s ease;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
 }
 
-.toggle + .toggle { border-left: 1px solid #e5e5ea; }
+/* subtle divider only between buttons */
+.toggle + .toggle,
+.toggle-distance + .toggle-distance {
+  border-left: 1px solid #e0e0e0;
+}
 
-.toggle.active {
+/* active state */
+.toggle.active,
+.toggle-distance.active {
   background: #111;
   color: #fff;
 }
+
+/* disabled state */
+.toggle.disabled,
+.toggle-distance.disabled {
+  background: #f1f1f4;
+  color: #999;
+  pointer-events: none;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 
 /* Disabled toggle state when data for that distance isn't present */
 .toggle.disabled {
@@ -528,9 +557,9 @@ input[type="range"]::-moz-range-thumb {
 /* Consistent height and style for text + number inputs */
 input[type="number"],
 input[type="text"] {
-  height: 34px; /* visually matches slider thumb height */
+  height: 20px; /* visually matches slider thumb height */
   padding: 4px 8px;
-  font-size: 0.95rem;
+  font-size: 0.20rem;
   border: 1px solid #ccc;
   border-radius: 6px;
   line-height: 1.2;
@@ -623,3 +652,27 @@ html, body {
     padding-right: 12px;
   }
 }
+
+.header-banner-img {
+  display: block;
+  margin: 16px auto 20px;
+  width: 100%;
+  max-width: 900px;
+  height: 200px;               /* ↓ sets smaller height */
+  object-fit: cover;           /* crops nicely without distortion */
+  border-radius: 10px;
+  opacity: 0.95;
+  transition: opacity 0.3s ease-in-out;
+}
+
+.header-banner-img:hover {
+  opacity: 1;
+}
+
+@media (max-width: 600px) {
+  .header-banner-img {
+    height: 80px;              /* ↓ even smaller for mobile */
+    margin: 12px auto 16px;
+  }
+}
+

@@ -3,6 +3,12 @@ document.addEventListener('DOMContentLoaded', () => {
   const ageInput = document.getElementById('age');
   const paceInput = document.getElementById('pace');
   const ageNumber = document.getElementById('ageNumber');
+
+  raceSelect.addEventListener('change', () => {
+  if (typeof updateToggleAvailability === 'function') updateToggleAvailability();
+});
+
+
   // --- AGE SYNC FIX (two-way binding + safe auto-update) ---
   ageInput.addEventListener('input', e => {
     const val = e.target.value;
@@ -84,6 +90,7 @@ async function loadRaceData() {
           console.log('🚀 FinishLine: Populating race dropdown...');
           populateRaceDropdown(rows);
           console.log('🚀 FinishLine: Race dropdown populated');
+          raceData = rows;
           resolve(rows);
         } catch (err) {
           console.error('🚀 FinishLine: Error processing Papa.parse result', err && err.stack ? err.stack : err);
@@ -124,6 +131,7 @@ async function loadRaceData() {
               console.log('✅ FinishLine: race preview ready — preview rows=', Math.min(rows.length, 200));
               if (rows.length) populateRaceDropdown(rows);
               previewLoaded = true;
+              raceData = rows;
               resolve(rows);
             } catch (err) { console.error('✅ FinishLine: race preview error', err); reject(err); }
           },
@@ -133,51 +141,71 @@ async function loadRaceData() {
     }
 
   // ---------- Event Handlers ----------
-  // Toggle click handling: ignore disabled toggles
-  toggles.forEach(t => {
-    t.addEventListener('click', () => {
-      if (t.classList.contains('disabled')) return;
-      toggles.forEach(x => x.classList.remove('active'));
-      t.classList.add('active');
-      results.classList.add('hidden');
-    });
+  // --- Distance Toggle Logic ---
+const distanceToggles = document.querySelectorAll('#distanceToggle .toggle-distance');
+let selectedDistance = 'Marathon';
+
+distanceToggles.forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.classList.contains('disabled')) return;
+    distanceToggles.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedDistance = btn.dataset.value;
+    results.classList.add('hidden');
+  });
+});
+
+
+  // --- Gender Toggle Logic ---
+const genderToggles = document.querySelectorAll('#genderToggle .toggle');
+let selectedGender = 'Male'; // default
+
+genderToggles.forEach(btn => {
+  btn.addEventListener('click', () => {
+    genderToggles.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    selectedGender = btn.dataset.value;
+  });
+});
+
+  function updateToggleAvailability() {
+  const selectedRace = raceSelect.value;
+  if (!selectedRace || !raceData.length) return;
+
+  const thisRaceRows = raceData.filter(
+    r => (r.event_name || '').toLowerCase() === selectedRace.toLowerCase()
+  );
+  const hasHalf = thisRaceRows.some(r => (r.event_type || '').toLowerCase().includes('half'));
+  const hasFull = thisRaceRows.some(r => (r.event_type || '').toLowerCase().includes('full'));
+
+  const halfBtn = document.querySelector('#distanceToggle .toggle-distance[data-value="Half Marathon"]');
+  const fullBtn = document.querySelector('#distanceToggle .toggle-distance[data-value="Marathon"]');
+
+  // Reset both buttons first
+  [halfBtn, fullBtn].forEach(btn => {
+    if (!btn) return;
+    btn.classList.remove('disabled', 'active');
   });
 
-  // Update which distance toggles are enabled based on loaded data
-  function updateToggleAvailability() {
-    const hasMarathon = raceData.some(r => r.event_type === 'Marathon');
-    const hasHalf = raceData.some(r => r.event_type === 'Half Marathon');
-    toggles.forEach(btn => {
-      const val = btn.dataset && btn.dataset.value;
-      if (val === 'Marathon') {
-        if (!hasMarathon) {
-          btn.classList.add('disabled');
-          btn.classList.remove('active');
-        } else {
-          btn.classList.remove('disabled');
-        }
-      }
-      if (val === 'Half Marathon') {
-        if (!hasHalf) {
-          btn.classList.add('disabled');
-          btn.classList.remove('active');
-        } else {
-          btn.classList.remove('disabled');
-        }
-      }
-    });
+  // Always prefer Marathon by default
+  selectedDistance = 'Marathon';
 
-    // Default preference: Marathon if available, otherwise Half Marathon
-    const marathonBtn = Array.from(toggles).find(b => b.dataset && b.dataset.value === 'Marathon');
-    const halfBtn = Array.from(toggles).find(b => b.dataset && b.dataset.value === 'Half Marathon');
-    if (marathonBtn && !marathonBtn.classList.contains('disabled')) {
-      toggles.forEach(x => x.classList.remove('active'));
-      marathonBtn.classList.add('active');
-    } else if (halfBtn && !halfBtn.classList.contains('disabled')) {
-      toggles.forEach(x => x.classList.remove('active'));
+  // Disable Half if missing data
+  if (!hasHalf && halfBtn) halfBtn.classList.add('disabled');
+
+  // Activate Marathon by default if it exists
+  if (fullBtn) fullBtn.classList.add('active');
+
+  // If Marathon data doesn’t exist but Half does, fallback
+  if (!hasFull && hasHalf) {
+    if (fullBtn) fullBtn.classList.add('disabled');
+    if (halfBtn) {
+      halfBtn.classList.remove('disabled');
       halfBtn.classList.add('active');
+      selectedDistance = 'Half Marathon';
     }
   }
+}
 
   // keep slider and text synced
   paceInput.addEventListener('input', e => {
@@ -204,7 +232,7 @@ async function loadRaceData() {
     renderResultsAndChart();
     // re-anchor highlight band to newly calculated finishTime
     try {
-      const selectedType = document.querySelector('.toggle.active')?.dataset?.value || 'Half Marathon';
+      const selectedType = selectedDistance;
       const distance = selectedType === 'Marathon' ? 26.2 : 13.1;
       const finishTime = (parseFloat(paceInput.value) || 0) * distance * 60; // seconds
       window._hzUserMin = finishTime;
@@ -219,8 +247,8 @@ async function loadRaceData() {
   // ---------- Core Logic ----------
   function renderResultsAndChart() {
     const raceName = raceSelect.value;
-    const selectedType = document.querySelector('.toggle.active')?.dataset?.value || 'Half Marathon';
-    const gender = document.querySelector('input[name="gender"]:checked').value;
+    const selectedType = selectedDistance;
+    const gender = selectedGender;
     const age = parseInt(ageInput.value);
     const pace = parseFloat(paceInput.value);
     const distance = selectedType === 'Marathon' ? 26.2 : 13.1;
@@ -688,7 +716,7 @@ function renderDistributionChart(canvasId, filtered, userTime, labelText) {
     const speedStr = pctDelta > 0 ? `+${pctDelta}% slower` : `${Math.abs(pctDelta)}% faster`;
 
     // pace (min:sec per mile)
-    const selectedType = document.querySelector('.toggle.active')?.dataset?.value || 'Half Marathon';
+    const selectedType = selectedDistance;
     const miles = selectedType === 'Marathon' ? 26.2 : 13.1;
     const paceSeconds = compTime / miles;
     const paceMin = Math.floor(paceSeconds / 60);
