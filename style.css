@@ -27,14 +27,17 @@ h1 {
   font-size: 0.95rem;
 }
 
+
 .input-section,
 .results {
-  background: #fff;
+  background: #fcfcfd; /* slightly off-white for contrast */
   border: 1px solid #e3e3e8;
   border-radius: 12px;
   padding: 24px;
   margin-bottom: 32px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
+
 
 .form-grid {
   display: grid;
@@ -45,11 +48,22 @@ h1 {
 
 .input-group label {
   display: block;
-  font-weight: 500;
-  font-size: 0.9rem;
+  font-weight: 600;
+  font-size: 1rem;
   margin-bottom: 6px;
-  color: #333;
+  color: #222; /* darker gray for visual anchor */
+  letter-spacing: 0.02em;
 }
+
+
+.input-group {
+  margin-bottom: 8px; /* more space between groups */
+}
+
+.form-grid {
+  row-gap: 28px; /* visually separates Race / Distance / Gender blocks */
+}
+
 
 select,
 input[type="range"] {
@@ -83,6 +97,10 @@ input[type="range"] {
   max-width: 380px;
 }
 
+#genderToggle, #distanceToggle {
+  gap: 4px; /* reduce space between buttons */
+}
+
 
 .toggle,
 .toggle-distance {
@@ -91,16 +109,19 @@ input[type="range"] {
   color: #111;
   border: none;
   padding: 0;
-  font-size: 0.80rem;
+  font-size: 0.8rem;          /* slightly smaller text */
   font-weight: 500;
   cursor: pointer;
-  transition: background 0.2s ease, color 0.2s ease;
-  height: 32px;
+  transition: background 0.2s ease, color 0.2s ease, transform 0.05s ease;
+  height: 30px;               /* slightly shorter buttons */
+  line-height: 1;             /* tighter vertical centering */
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 8px;
+  border-radius: 8px;         /* smoother corner to match input boxes */
 }
+
+
 
 /* subtle divider only between buttons */
 .toggle + .toggle,
@@ -108,12 +129,14 @@ input[type="range"] {
   border-left: 1px solid #e0e0e0;
 }
 
-/* active state */
+
+
 .toggle.active,
 .toggle-distance.active {
-  background: #111;
+  background: linear-gradient(180deg, #111 0%, #222 100%);
   color: #fff;
 }
+
 
 /* disabled state */
 .toggle.disabled,
@@ -148,6 +171,12 @@ input[type="range"] {
   padding: 10px 12px;
   box-shadow: none;
 }
+.calculate-btn:active {
+  transform: scale(0.97);
+  background: #000;
+  transition: transform 0.05s ease;
+}
+
 .calculate-btn:hover { background: #222; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
 
 /* Summary text max-width for comfortable line length */
@@ -356,10 +385,11 @@ input[type="range"] {
 input[type="range"] {
   -webkit-appearance: none;
   appearance: none;
-  height: 4px;
+  height: 6px; /* slightly thicker track */
   background: #d9d9df;
   border-radius: 999px;
 }
+
 input[type="range"]::-webkit-slider-runnable-track {
   height: 4px;
   background: #d9d9df;
@@ -401,7 +431,7 @@ input[type="range"]::-moz-range-thumb {
   background: #fafafa;
   border-radius: 10px;
   padding: 16px 20px 22px;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
 }
 
 .section-header {
@@ -561,7 +591,7 @@ input[type="text"] {
   padding: 4px 8px;
   font-size: 0.20rem;
   border: 1px solid #ccc;
-  border-radius: 6px;
+  border-radius: 8px;
   line-height: 1.2;
   box-sizing: border-box;
   vertical-align: middle;
@@ -595,7 +625,7 @@ input[type="range"] {
   height: 28px; /* matches slider track + thumb visually */
   padding: 2px 6px !important; /* override earlier padding cleanly */
   font-size: 0.9rem;
-  border-radius: 6px;
+  border-radius: 8px;
   box-sizing: border-box;
   line-height: 1.1;
 }
