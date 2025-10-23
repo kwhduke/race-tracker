@@ -158,7 +158,7 @@ distanceToggles.forEach(btn => {
 
   // --- Gender Toggle Logic ---
 const genderToggles = document.querySelectorAll('#genderToggle .toggle');
-let selectedGender = 'Male'; // default
+let selectedGender = 'Female'; // default
 
 genderToggles.forEach(btn => {
   btn.addEventListener('click', () => {
@@ -167,6 +167,11 @@ genderToggles.forEach(btn => {
     selectedGender = btn.dataset.value;
   });
 });
+
+
+// Visually mark Female as selected on load
+const defaultFemaleBtn = document.querySelector('#genderToggle .toggle[data-value="Female"]');
+if (defaultFemaleBtn) defaultFemaleBtn.classList.add('active');
 
   function updateToggleAvailability() {
   const selectedRace = raceSelect.value;
@@ -334,6 +339,13 @@ genderToggles.forEach(btn => {
   ${card('Gender Placement', `#${genderPlace}`, `out of ${genderTotal}<br><span class="placement-percentage">Top ${genderTop}%</span>`)}
       ${card('Division Placement', `#${divisionPlace}`, `${division}<br><span class="placement-percentage">Top ${divisionTop}%</span>`)}
     `;
+
+
+    // Smooth scroll to results
+const resultsSection = document.querySelector(".results");
+if (resultsSection) {
+  resultsSection.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
     // Demographic & performance cards
     const ages = filtered.map(d => { const a = parseInt(d.Age); return isNaN(a) ? null : a; }).filter(Boolean);
